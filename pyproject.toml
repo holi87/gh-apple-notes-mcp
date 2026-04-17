@@ -1,6 +1,6 @@
 [project]
 name = "gh-apple-notes-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Custom MCP server for Apple Notes integration"
 requires-python = ">=3.10"
 dependencies = [

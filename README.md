@@ -2,6 +2,14 @@
 
 Custom MCP server for Apple Notes. Lets Claude Code (and any MCP-compatible client) list, read, create, tag, update, and delete notes — plus semantic search over a companion Obsidian vault.
 
+## What's new in v0.2
+
+**FTS5 substring-fallback search.** `semantic.search` now dorzuca wyniki substring-match (trigram tokenizer) gdy prefix search zwrócił mniej niż `top_k` trafień. Każdy wynik oznaczony `match_type: "prefix" | "trigram"` — Claude-side rerank może wziąć to pod uwagę.
+
+**Auto-migration.** Bazy v0.1 automatycznie dostają nowy `fts_trigram` indeks przy pierwszym `semantic.search` po update. Zero manual steps — po `git pull && ./setup.sh` wszystko działa.
+
+**Brak breaking changes.** Istniejące konsumenty (Claude Code skille) ignorują nowe pole — safe upgrade.
+
 **Architecture:** AppleScript (via `osascript`) for CRUD + read-only SQLite for native hashtag tags (which AppleScript exposes as `\ufffc` placeholders). macOS-only.
 
 ## Requirements
