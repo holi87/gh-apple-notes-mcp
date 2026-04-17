@@ -1,0 +1,30 @@
+[project]
+name = "gh-apple-notes-mcp"
+version = "0.1.0"
+description = "Custom MCP server for Apple Notes integration"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0",
+    "pydantic>=2.0",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.0",
+]
+
+[project.scripts]
+gh-apple-notes-mcp = "gh_apple_notes_mcp.__main__:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["gh_apple_notes_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
+pythonpath = ["src"]
