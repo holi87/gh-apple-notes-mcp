@@ -1,8 +1,11 @@
 """SQLite FTS5 wrapper for vault markdown indexing."""
+import logging
 import sqlite3
 import unicodedata
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 SCHEMA_SQL = """
@@ -137,9 +140,31 @@ class FtsIndex:
             conn.execute("DELETE FROM fts_trigram WHERE path = ?", (path,))
 
     def _ensure_trigram_table_exists(self) -> None:
-        """No-op placeholder — Task 6 implements lazy migration. Schema already creates
-        fts_trigram in fresh DBs, so this only matters for upgraded v0.1 databases."""
-        pass
+        """Lazy-build fts_trigram from existing fts on v0.1→v0.2 upgrade.
+
+        Idempotent: checks sqlite_master before creating. Graceful degradation
+        if SQLite build lacks trigram tokenizer (logs warning, returns).
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='fts_trigram'"
+            ).fetchone()
+            if row:
+                return
+            try:
+                conn.executescript(SCHEMA_SQL)
+                copied = conn.execute(
+                    "INSERT INTO fts_trigram (path, title, folder, tags, body) "
+                    "SELECT path, title, folder, tags, body FROM fts"
+                ).rowcount
+                logger.info(f"fts_trigram created, {copied} rows migrated from fts")
+            except sqlite3.OperationalError as e:
+                if "trigram" in str(e).lower():
+                    logger.warning(
+                        "SQLite trigram tokenizer unavailable — substring fallback disabled"
+                    )
+                    return
+                raise
 
     def _prefix_search(
         self,
@@ -194,7 +219,13 @@ class FtsIndex:
         sql += "ORDER BY ftr.rank LIMIT ?"
         params.append(limit)
         with self._connect() as conn:
-            rows = conn.execute(sql, params).fetchall()
+            try:
+                rows = conn.execute(sql, params).fetchall()
+            except sqlite3.OperationalError as e:
+                if "fts_trigram" in str(e).lower():
+                    logger.debug("fts_trigram unavailable — skipping trigram stage")
+                    return []
+                raise
             return [dict(r) for r in rows]
 
     def search(
