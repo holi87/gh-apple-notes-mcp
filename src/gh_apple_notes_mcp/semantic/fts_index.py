@@ -68,6 +68,25 @@ def _escape_fts5_query(query: str) -> str:
     return " AND ".join(escaped_tokens)
 
 
+def _escape_trigram_query(query: str) -> str:
+    """Wrap tokens as phrase-match (no prefix *) for trigram tokenizer.
+
+    Trigram requires ≥3 chars total after normalization — shorter queries
+    return empty string (caller skips trigram stage).
+    """
+    normalized = _normalize(query)
+    if len(normalized.strip()) < 3:
+        return ""
+    tokens = normalized.split()
+    if not tokens:
+        return ""
+    escaped = []
+    for t in tokens:
+        safe = t.replace('"', '""')
+        escaped.append(f'"{safe}"')
+    return " AND ".join(escaped)
+
+
 class FtsIndex:
     def __init__(self, db_path: Path):
         self.db_path = db_path

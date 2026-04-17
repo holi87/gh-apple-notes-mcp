@@ -53,3 +53,35 @@ def test_delete_removes_from_both_tables(tmp_path):
         tri_paths = [r[0] for r in conn.execute("SELECT path FROM fts_trigram").fetchall()]
     assert fts_paths == ["Ideas/y.md"]
     assert tri_paths == ["Ideas/y.md"]
+
+
+from gh_apple_notes_mcp.semantic.fts_index import _escape_trigram_query
+
+
+def test_escape_trigram_single_word():
+    assert _escape_trigram_query("cosmos") == '"cosmos"'
+
+
+def test_escape_trigram_multi_word_and():
+    result = _escape_trigram_query("cosmos test")
+    assert result == '"cosmos" AND "test"'
+
+
+def test_escape_trigram_too_short_returns_empty():
+    assert _escape_trigram_query("ab") == ""
+    assert _escape_trigram_query("a") == ""
+    assert _escape_trigram_query("") == ""
+
+
+def test_escape_trigram_whitespace_only_returns_empty():
+    assert _escape_trigram_query("   ") == ""
+
+
+def test_escape_trigram_escapes_embedded_double_quote():
+    # " becomes "" inside phrase per FTS5 spec
+    assert _escape_trigram_query('he"llo') == '"he""llo"'
+
+
+def test_escape_trigram_normalizes_polish_diacritics():
+    # łódź → lodz (transliteration + NFD fold)
+    assert _escape_trigram_query("łódź") == '"lodz"'
