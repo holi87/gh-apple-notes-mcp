@@ -136,13 +136,13 @@ class FtsIndex:
             conn.execute("DELETE FROM fts WHERE path = ?", (path,))
             conn.execute("DELETE FROM fts_trigram WHERE path = ?", (path,))
 
-    def search(
+    def _prefix_search(
         self,
         query: str,
         limit: int = 50,
         filter_folder: Optional[str] = None,
     ) -> list[dict]:
-        """BM25-ranked full-text search with optional folder filter."""
+        """BM25-ranked prefix-match search on main fts table."""
         if not query.strip():
             return []
         escaped = _escape_fts5_query(query)
@@ -161,3 +161,42 @@ class FtsIndex:
         with self._connect() as conn:
             rows = conn.execute(sql, params).fetchall()
             return [dict(r) for r in rows]
+
+    def _trigram_search(
+        self,
+        query: str,
+        limit: int = 50,
+        filter_folder: Optional[str] = None,
+    ) -> list[dict]:
+        """BM25-ranked trigram substring search, joined with fts for classification/mtime."""
+        if not query.strip():
+            return []
+        escaped = _escape_trigram_query(query)
+        if not escaped:
+            return []
+        sql = (
+            "SELECT ftr.path AS path, ftr.title AS title, ftr.folder AS folder, "
+            "       ftr.tags AS tags, ftr.body AS body, "
+            "       f.classification AS classification, f.mtime AS mtime "
+            "FROM fts_trigram ftr "
+            "LEFT JOIN fts f ON f.path = ftr.path "
+            "WHERE fts_trigram MATCH ? "
+        )
+        params: list = [escaped]
+        if filter_folder:
+            sql += "AND ftr.folder = ? "
+            params.append(filter_folder)
+        sql += "ORDER BY ftr.rank LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def search(
+        self,
+        query: str,
+        limit: int = 50,
+        filter_folder: Optional[str] = None,
+    ) -> list[dict]:
+        """BM25-ranked full-text search (prefix-only at this stage; Task 5 adds fallback)."""
+        return self._prefix_search(query, limit, filter_folder)

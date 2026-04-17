@@ -85,3 +85,47 @@ def test_escape_trigram_escapes_embedded_double_quote():
 def test_escape_trigram_normalizes_polish_diacritics():
     # łódź → lodz (transliteration + NFD fold)
     assert _escape_trigram_query("łódź") == '"lodz"'
+
+
+def test_trigram_search_finds_substring_match(tmp_path):
+    idx = FtsIndex(tmp_path / "fts.sqlite")
+    idx.create_schema()
+    idx.upsert(_row("Ideas/a.md", title="microcosmos", body="nothing here"))
+    idx.upsert(_row("Ideas/b.md", title="unrelated", body="zero overlap"))
+    results = idx._trigram_search("cosmos", limit=10)
+    paths = [r["path"] for r in results]
+    assert "Ideas/a.md" in paths
+    assert "Ideas/b.md" not in paths
+
+
+def test_trigram_search_respects_filter_folder(tmp_path):
+    idx = FtsIndex(tmp_path / "fts.sqlite")
+    idx.create_schema()
+    idx.upsert(_row("Ideas/a.md", title="microcosmos"))
+    idx.upsert({
+        "path": "Work/b.md", "title": "microcosmos", "folder": "Work",
+        "tags": "", "body": "body", "classification": "{}",
+        "mtime": "2026-04-17T09:00:00Z",
+    })
+    results = idx._trigram_search("cosmos", limit=10, filter_folder="Ideas")
+    paths = [r["path"] for r in results]
+    assert paths == ["Ideas/a.md"]
+
+
+def test_trigram_search_empty_query_returns_empty(tmp_path):
+    idx = FtsIndex(tmp_path / "fts.sqlite")
+    idx.create_schema()
+    idx.upsert(_row("Ideas/a.md"))
+    assert idx._trigram_search("", limit=10) == []
+    assert idx._trigram_search("ab", limit=10) == []  # <3 chars
+
+
+def test_trigram_search_returns_classification_and_mtime_via_join(tmp_path):
+    idx = FtsIndex(tmp_path / "fts.sqlite")
+    idx.create_schema()
+    idx.upsert(_row("Ideas/a.md", title="microcosmos"))
+    results = idx._trigram_search("cosmos", limit=10)
+    assert len(results) == 1
+    r = results[0]
+    assert r["classification"] == '{"folder":"Ideas","confidence":0.9}'
+    assert r["mtime"] == "2026-04-17T09:00:00Z"
