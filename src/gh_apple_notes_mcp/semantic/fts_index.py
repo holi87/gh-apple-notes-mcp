@@ -136,6 +136,11 @@ class FtsIndex:
             conn.execute("DELETE FROM fts WHERE path = ?", (path,))
             conn.execute("DELETE FROM fts_trigram WHERE path = ?", (path,))
 
+    def _ensure_trigram_table_exists(self) -> None:
+        """No-op placeholder — Task 6 implements lazy migration. Schema already creates
+        fts_trigram in fresh DBs, so this only matters for upgraded v0.1 databases."""
+        pass
+
     def _prefix_search(
         self,
         query: str,
@@ -198,5 +203,29 @@ class FtsIndex:
         limit: int = 50,
         filter_folder: Optional[str] = None,
     ) -> list[dict]:
-        """BM25-ranked full-text search (prefix-only at this stage; Task 5 adds fallback)."""
-        return self._prefix_search(query, limit, filter_folder)
+        """BM25-ranked search with prefix-first + trigram-fallback.
+
+        Returns list of dicts with match_type = "prefix" | "trigram".
+        Prefix matches come first (sorted by BM25), then trigram fills up to `limit`
+        (dedup'd by path). Trigram stage skipped if <3 chars or already at limit.
+        """
+        self._ensure_trigram_table_exists()
+
+        results = self._prefix_search(query, limit, filter_folder)
+        for r in results:
+            r["match_type"] = "prefix"
+
+        if len(results) >= limit:
+            return results
+
+        seen_paths = {r["path"] for r in results}
+        trigram_rows = self._trigram_search(query, limit, filter_folder)
+        for r in trigram_rows:
+            if r["path"] in seen_paths:
+                continue
+            r["match_type"] = "trigram"
+            results.append(r)
+            seen_paths.add(r["path"])
+            if len(results) >= limit:
+                break
+        return results
