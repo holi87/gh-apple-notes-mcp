@@ -16,6 +16,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
     mtime UNINDEXED,
     tokenize = 'unicode61 remove_diacritics 2'
 );
+
+CREATE VIRTUAL TABLE IF NOT EXISTS fts_trigram USING fts5(
+    path UNINDEXED,
+    title,
+    folder UNINDEXED,
+    tags,
+    body,
+    tokenize = 'trigram'
+);
 """
 
 # Characters that lack NFD decompositions but should still be folded to ASCII
@@ -71,7 +80,7 @@ class FtsIndex:
 
     def create_schema(self) -> None:
         with self._connect() as conn:
-            conn.execute(SCHEMA_SQL)
+            conn.executescript(SCHEMA_SQL)
 
     def upsert(self, record: dict) -> None:
         """Insert or replace a note record (searchable fields are normalized)."""

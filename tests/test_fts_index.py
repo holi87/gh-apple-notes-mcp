@@ -14,6 +14,20 @@ def test_create_schema(tmp_path):
     assert db.exists()
 
 
+def test_create_schema_creates_both_fts_and_trigram_tables(tmp_path):
+    import sqlite3
+    db = tmp_path / "fts.sqlite"
+    idx = FtsIndex(db)
+    idx.create_schema()
+    with sqlite3.connect(db) as conn:
+        rows = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall()
+    names = [r[0] for r in rows]
+    assert "fts" in names
+    assert "fts_trigram" in names
+
+
 def test_upsert_and_search(tmp_path):
     idx = FtsIndex(tmp_path / "fts.sqlite")
     idx.create_schema()
