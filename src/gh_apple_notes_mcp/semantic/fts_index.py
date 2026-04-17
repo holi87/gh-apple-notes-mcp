@@ -83,9 +83,10 @@ class FtsIndex:
             conn.executescript(SCHEMA_SQL)
 
     def upsert(self, record: dict) -> None:
-        """Insert or replace a note record (searchable fields are normalized)."""
+        """Insert or replace a note record into both fts and fts_trigram tables."""
         with self._connect() as conn:
             conn.execute("DELETE FROM fts WHERE path = ?", (record["path"],))
+            conn.execute("DELETE FROM fts_trigram WHERE path = ?", (record["path"],))
             conn.execute(
                 "INSERT INTO fts (path, title, folder, tags, body, classification, mtime) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -99,10 +100,22 @@ class FtsIndex:
                     record["mtime"],
                 ),
             )
+            conn.execute(
+                "INSERT INTO fts_trigram (path, title, folder, tags, body) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    record["path"],
+                    _normalize(record["title"]),
+                    record["folder"],
+                    _normalize(record["tags"]),
+                    _normalize(record["body"]),
+                ),
+            )
 
     def delete(self, path: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM fts WHERE path = ?", (path,))
+            conn.execute("DELETE FROM fts_trigram WHERE path = ?", (path,))
 
     def search(
         self,
