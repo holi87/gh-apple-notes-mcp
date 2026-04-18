@@ -76,15 +76,25 @@ end tell
         return {"success": True}
 
     def append_tag(self, id: str, tag: str, existing_body: str) -> dict:
-        """Idempotent tag append."""
-        tag_pattern = re.compile(rf"(?<!\S)#{re.escape(tag)}(?!\w)")
-        if tag_pattern.search(existing_body):
+        """Idempotent tag append preserving Apple Notes HTML structure.
+
+        `existing_body` must be the raw HTML of the note (from reader's
+        `get_note_html`), not the plaintext view — Apple Notes re-parses
+        whatever we write back as HTML, so feeding plaintext here flattens
+        bullets, headings, and paragraph breaks.
+
+        The check that detects an already-present tag strips HTML tags first
+        so sequences like `<div>#tag</div>` register as present.
+        """
+        stripped = re.sub(r"<[^>]+>", " ", existing_body)
+        tag_pattern = re.compile(rf"#{re.escape(tag)}(?![\w/-])")
+        if tag_pattern.search(stripped):
             return {
                 "success": True,
                 "already_present": True,
                 "new_body": existing_body,
             }
-        new_body = existing_body.rstrip() + f" #{tag}"
+        new_body = existing_body.rstrip() + f"<div>#{tag}</div>"
         self.update_body(id=id, new_body=new_body)
         return {
             "success": True,

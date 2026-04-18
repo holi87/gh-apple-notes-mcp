@@ -25,6 +25,7 @@ def handlers():
         "modified": "2026-04-17T09:05:00Z", "tags": ["claude"],
         "has_attachments": False,
     }
+    reader.get_note_html.return_value = "<div>kup chleb #claude</div>"
     reader.get_note_by_title.return_value = None
     reader.list_folders.return_value = [
         {"name": "Notes", "note_count": 0, "is_smart_folder": False},
@@ -101,9 +102,11 @@ async def test_create(handlers):
 async def test_append_tag(handlers):
     h, reader, writer = handlers
     result = await h["notes.append_tag"]({"id": "uuid-001", "tag": "claude/synced"})
-    # Should have called reader.get_note to get body, then writer.append_tag
-    reader.get_note.assert_called_once_with(id="uuid-001")
+    reader.get_note_html.assert_called_once_with(id="uuid-001")
+    reader.get_note.assert_not_called()
     writer.append_tag.assert_called_once()
+    kwargs = writer.append_tag.call_args.kwargs
+    assert kwargs["existing_body"] == "<div>kup chleb #claude</div>"
     assert "success" in result
 
 

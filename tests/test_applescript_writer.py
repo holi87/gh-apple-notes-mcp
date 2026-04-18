@@ -79,10 +79,10 @@ def test_append_tag_idempotent_present(mock_run):
     w = AppleScriptWriter()
     result = w.append_tag(
         id="uuid", tag="claude/synced",
-        existing_body="Some text #claude/synced more",
+        existing_body="<div>Some text</div><div>#claude/synced</div>",
     )
     assert result["already_present"] is True
-    assert result["new_body"] == "Some text #claude/synced more"
+    assert result["new_body"] == "<div>Some text</div><div>#claude/synced</div>"
     mock_run.assert_not_called()
 
 
@@ -90,10 +90,27 @@ def test_append_tag_idempotent_present(mock_run):
 def test_append_tag_missing(mock_run):
     mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
     w = AppleScriptWriter()
-    result = w.append_tag(id="uuid", tag="claude/synced", existing_body="Text")
+    result = w.append_tag(
+        id="uuid", tag="claude/synced",
+        existing_body="<div><h1>Title</h1></div><div>Body</div>",
+    )
     assert result["already_present"] is False
-    assert "#claude/synced" in result["new_body"]
+    assert result["new_body"].endswith("<div>#claude/synced</div>")
+    assert "<h1>Title</h1>" in result["new_body"]
     mock_run.assert_called_once()
+
+
+@patch("gh_apple_notes_mcp.applescript_writer.subprocess.run")
+def test_append_tag_prefix_match_does_not_block(mock_run):
+    """#claude should not register as present when only #claude/synced exists."""
+    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    w = AppleScriptWriter()
+    result = w.append_tag(
+        id="uuid", tag="claude",
+        existing_body="<div>Body #claude/synced</div>",
+    )
+    assert result["already_present"] is False
+    assert result["new_body"].endswith("<div>#claude</div>")
 
 
 @patch("gh_apple_notes_mcp.applescript_writer.subprocess.run")

@@ -23,6 +23,27 @@ class AppleScriptError(RuntimeError):
     """Generic osascript failure."""
 
 
+def clean_plaintext_body(body: str, title: str) -> str:
+    """Normalize AppleScript `plaintext` output for consumers.
+
+    - Strip leading line when it duplicates the note title (Apple Notes renders
+      the title as the first visible line of the note).
+    - Remove U+FFFC object-replacement chars left behind by attachments.
+    - Collapse runs of 3+ blank lines into a single blank line.
+    - Strip trailing whitespace on each line; trim outer whitespace.
+    """
+    if not body:
+        return body
+    text = body.replace("\uFFFC", "")
+    lines = text.split("\n")
+    if lines and title and lines[0].strip() == title.strip():
+        lines = lines[1:]
+    lines = [ln.rstrip() for ln in lines]
+    text = "\n".join(lines)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip("\n")
+
+
 def extract_tags_from_body(body: str) -> list[str]:
     """Extract #tag tokens (lowercase, dedupe, preserve order)."""
     if not body:
@@ -182,6 +203,20 @@ end isoDate
 '''
         return script
 
+    def _build_get_html_script(self, note_id: str) -> str:
+        """Build AppleScript returning the raw HTML body of a note."""
+        safe_id = note_id.replace('"', '\\"')
+        return f'''
+tell application "Notes"
+    try
+        set n to first note whose id is "{safe_id}"
+    on error
+        return ""
+    end try
+    return body of n as string
+end tell
+'''
+
     def _build_list_folders_script(self) -> str:
         """Build AppleScript to list all folders."""
         return '''
@@ -242,7 +277,7 @@ return output
             if note_id in seen_ids:
                 continue
             seen_ids.add(note_id)
-            body = parsed["body"]
+            body = clean_plaintext_body(parsed["body"], parsed["title"])
             tags = extract_tags_from_body(body)
             pk = note_pk_from_id(note_id)
             if pk is not None:
@@ -285,7 +320,7 @@ return output
         parsed = _parse_note_record(output)
         if parsed is None:
             raise NoteNotFoundError(f"Failed to parse note: {id}")
-        body = parsed["body"]
+        body = clean_plaintext_body(parsed["body"], parsed["title"])
         tags = extract_tags_from_body(body)
         pk = note_pk_from_id(parsed["id"])
         if pk is not None:
@@ -302,6 +337,19 @@ return output
             "tags": tags,
             "has_attachments": False,
         }
+
+    def get_note_html(self, id: str) -> str:
+        """Fetch a note's raw HTML body (preserves rich formatting).
+
+        Used by writer operations that must round-trip the body through
+        Apple Notes without flattening to plaintext.
+        """
+        script = self._build_get_html_script(id)
+        result = _run_osascript(script)
+        output = result.stdout
+        if not output.strip():
+            raise NoteNotFoundError(f"Note not found: {id}")
+        return output.rstrip("\n")
 
     def get_note_by_title(self, title: str, folder: Optional[str] = None) -> Optional[dict]:
         """Migration helper: find note by exact title match."""

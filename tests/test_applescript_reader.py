@@ -7,6 +7,7 @@ from gh_apple_notes_mcp.applescript_reader import (
     AppleScriptReader,
     AppleScriptPermissionError,
     NoteNotFoundError,
+    clean_plaintext_body,
     extract_tags_from_body,
 )
 
@@ -32,6 +33,50 @@ def test_extract_tags_empty():
 
 def test_extract_tags_lowercase():
     assert "claudetag" in extract_tags_from_body("#ClaudeTag")
+
+
+def test_clean_plaintext_strips_title_duplicate():
+    body = "Shopping\nkup chleb\nkup mleko"
+    assert clean_plaintext_body(body, "Shopping") == "kup chleb\nkup mleko"
+
+
+def test_clean_plaintext_keeps_body_when_no_title_duplicate():
+    body = "kup chleb\nkup mleko"
+    assert clean_plaintext_body(body, "Shopping") == "kup chleb\nkup mleko"
+
+
+def test_clean_plaintext_collapses_blank_runs():
+    body = "Title\n\n\n\n\nline a\n\n\n\nline b"
+    assert clean_plaintext_body(body, "Title") == "line a\n\nline b"
+
+
+def test_clean_plaintext_removes_attachment_placeholder():
+    body = "Note\nattachment \uFFFC here"
+    assert clean_plaintext_body(body, "Note") == "attachment  here"
+
+
+def test_clean_plaintext_empty_safe():
+    assert clean_plaintext_body("", "T") == ""
+
+
+@patch("gh_apple_notes_mcp.applescript_reader.subprocess.run")
+def test_get_note_html_returns_raw_body(mock_run):
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout="<div><h1>Title</h1></div><div>body</div>\n",
+        stderr="",
+    )
+    r = AppleScriptReader()
+    html = r.get_note_html("uuid-1")
+    assert html == "<div><h1>Title</h1></div><div>body</div>"
+
+
+@patch("gh_apple_notes_mcp.applescript_reader.subprocess.run")
+def test_get_note_html_missing(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    r = AppleScriptReader()
+    with pytest.raises(NoteNotFoundError):
+        r.get_note_html("nope")
 
 
 # Format for mocked osascript list_notes output:

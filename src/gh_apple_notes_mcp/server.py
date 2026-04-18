@@ -54,9 +54,9 @@ def build_server_handlers(
 
     async def handle_append_tag(args: dict) -> dict:
         inp = AppendTagInput(**args)
-        existing = reader.get_note(id=inp.id)
+        existing_html = reader.get_note_html(id=inp.id)
         return writer.append_tag(
-            id=inp.id, tag=inp.tag, existing_body=existing["body"]
+            id=inp.id, tag=inp.tag, existing_body=existing_html
         )
 
     async def handle_update_body(args: dict) -> dict:
